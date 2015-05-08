@@ -1,0 +1,267 @@
+---
+title: 'Sector Weighting: A Detailed Implementation of Black-Litterman'
+author: "Kevin Pei - Portfolio Analyst"
+date: "Wednesday, May 06, 2015"
+extra: "Sprott Student Investment Fund"
+output: 
+  html_document:
+    theme: "cerulean"
+---
+
+![](./logo.jpg)
+
+***
+
+```{r echo=FALSE}
+setwd("C:\\Users\\Kevin\\Documents\\SSIF sector weighting")
+r <- read.csv("sector.rets.csv")
+```
+
+
+This report will provide a detailed walkthrough in arriving at an optimal allocation among sectors in line to our Equity managers' beliefs of returns between sectors.   Optimal allocation is derived using a well-known model called "Black-Litterman", which we will refer to as *BL*.  BL is implemented as an improvement over the traditional Markowitz portfolio optimization through 1) incorporating investor beliefs about returns on asset through Bayesian inference and 2) solving the problem of overly concentrated portfolios with a process called reverse optimization.  While BL is good in theory, inputs and beliefs need to be accurate and thus final sector weighting will be subjectively adjusted from the model output to ensure mandates are accounted for.
+
+In this report, detailed implementation of BL is shown along with supporting r code to clarify process.  The report is suppose to be intuitive and thus excessive equations or derivations are beyond the scope of this report.  Methodology is precisely followed from [Thomas Idzorek (2005)](https://corporate.morningstar.com/ib/documents/MethodologyDocuments/IBBAssociates/BlackLitterman.pdf).  
+
+&nbsp;  
+
+### Defining Sector Returns
+
+SSIF defines its benchmark to be 65% US equity, 30% Canadian equity and 5% 10-yr CAD Treasury.  Since treasury rates do not relate to sectors, we will assume 65% US and 35% CN Allocation.  There are ten sectors from both countries and we combine these returns to a single sector according to these allocations.  
+
+Five year monthly returns are obtained from Bloomberg indices and the closest proxies I use are the S&P 500 (US) and S&P/TSX (CA).
+
+```{r}
+  head(r,n=2) #List the first 2 entries of each sector
+```
+
+We now combine these returns into a single sector and plot it to ensure everything looks good.  Plotted are cumulative compounded returns from each combined sectors.
+
+```{r}
+  r.us <- r[,2:11] # US Sector Returns
+  r.cn <- r[,-(1:11)] # CN Sector Returns
+  r.comb <- 0.65*r.us + 0.35*r.cn #Combine them according to allocation
+
+  rownames(r.comb) <- r[,1]
+  colnames(r.comb) <- c("CONS.DISCRET", "CONS.STAPLES", "ENERGY", "HEALTH.CARE", "FINANCIALS", "INFO.TECH", "UTILITIES", "INDUSTRIALS", "MATERIALS", "TELECOM")
+
+ matplot(cumprod(1+r.comb), type = c("l"), col=1:10, ylab="Cumulative Return", xlab="T") #plot cumulative compounded returns
+ legend("topleft", legend = colnames(r.comb), col=1:10,pch=1,cex=0.6) # legend
+```
+
+Monthly sector returns are used to estimate the covariance matrix $\Sigma$.  Due to estimation risk prevalent in asset returns, I will use the [constant correlation model](http://web-docs.stern.nyu.edu/salomon/docs/derivatives/S-DRP-04-02.pdf) to estimate  the covariance matrix.
+
+```{r}
+  sigma <- apply(r.comb,2,sd) #Get Standard deviation of sectors
+  rho <- cor(r.comb) # Get Correlation matrix
+  cc <- mean(upper.tri(rho, diag=FALSE)) # Get Average pairwise correlation
+  rho[rho != 1] <- cc
+  cov.mat <- rho * (sigma %*% t(sigma))
+```
+
+&nbsp;  
+
+### Reverse Optimization
+
+In this section, I estimate a few inputs necessary for BL.  This process is done through reverse optimization by first assuming that the market capitalization weights $w_{mkt}$ are considered "optimal" and then deriving implied returns through the covariance matrix.  More specifically, implied returns are scaled from $(\Sigma) w_{mkt}$ with $\lambda$, often referred to as the risk aversion coefficient.  Lambda can be estimated as such:
+
+$$ \lambda = \frac{E[R]-r_f}{\sigma^2} $$
+
+```{r}
+  # Both US and CN sector returns are used to calculate lambda since combined weightings do not provide accurate actual historical return.
+  # Weightings as of end of april 2015
+  w.mkt.us <- c(0.125,0.095,0.085,0.146,0.161,0.199,0.03,0.103,0.032,0.023)
+  w.mkt.cn <- c(0.062,0.035,0.222,0.053,0.347,0.024,0.022,0.081,0.109,0.046)
+
+  # Get Annual Expected Return
+  ret.total <- as.matrix(r.us)%*%(0.65*w.mkt.us)+as.matrix(r.cn)%*%(0.35*w.mkt.cn)
+  er <- mean(ret.total)*12
+  er
+  rf <- 0.02 # 10 Y Annual US Yield are about 2%
+  v <- var(ret.total) # Variance of the total return
+  lambda <- (er-rf)/v
+  lambda
+```
+
+We can now calculate the implied equilibrium returns using reverse optimization ($\pi=\lambda\Sigma w_{mkt}$).  We set the market cap weights ($w_{mkt}$) to equal to 65% US Weight + 35% CN Weights.  The reason this works and not in the lambda case is because we are assuming that the combination of the two weights is already "optimal" and deriving the expected returns whereas calculating lambda requires accurate historical returns.
+
+```{r}
+  w.mkt <- (0.65*w.mkt.us+0.35*w.mkt.cn)
+  pi <- c(lambda)*(cov.mat%*%w.mkt)
+  barplot(t(pi*100), cex.names=0.5, las=2, main="Sector Implied Returns in Percentages")
+```
+
+&nbsp;  
+
+### Manager's Beliefs
+
+In this section, I incorporate our equity manager's belief system through translating an over/under-weight table into more structured beliefs used in BL.  Below is a list of our equity managers' views on future sector performance.
+
+* __Consumer Discretionary__: Equal Weight
+* __Consumer Staples__: Equal Weight
+* __Energy__: Equal Weight moving towards Overweight over time with 70% Confidence
+* __Healthcare__: Overweight with 80% Confidence
+* __Financials__: Underweight with 90% Confidence
+* __Information Tech.__: Overweight with 60% Confidence
+* __Utilities__: Overweight with 80% Confidence
+* __Industrials__: Equal weight
+* __Materials__: Underweight with 80% Confidence
+* __Telecom__: Underweight with 90% Confidence
+
+#### BL Belief Structure
+
+I am going to introduce an assumption in transforming our previously agreed upon beliefs into the BL belief structure.  Within BL, beliefs are structure into three parameters: the impact vector ($Q$), the effect matrix ($P$) and belief error matrix ($\Omega$).  Intuitively, the BL belief structure requires the magnitude of belief ($Q$ and $P$) and the degree of uncertainty ($\Omega$).  
+
+__Assumption__ For any sector overweights (underweights), they are said to outperform (underperform) only equal weight and underweight (overweight) sectors of equal magnitude.
+
+For example, if we expect Telecom to underperform (thus underweighting), the BL belief is stated such that Telecom will underperform all sectors, except financials and materials, equally by an $X\%$ expected annual return.  
+
+&nbsp; 
+
+__The Impact Vector__  
+$Q$ is a vector with $K$ number of beliefs that states the impact of the belief.  For example, if we had one belief that financials would have a 6% return this year, then $Q=[0.06]$.  We have 3 overweight and underweights, thus we will have 6 beliefs.  For now, we will specify the impact to be an arbitrary 4% annual return.
+
+An interesting belief to consider is our energy thesis.  One way to interpret this is that currently our managers/analysts are bullish on energy but current low oil prices make it hard to know exactly where stock prices are going.  Thus, moving from equal weight to overweight implies that there may be potential rallies from the energy sectors that we want to be more positioned toward but higher potential gains are more promising in the future (presumably beyond current analysis period).  To account for this, the view I will add is the same as overweighting energy except with a lower return potential against overweights.
+
+```{r}
+  Q <- c(rep(0.05, 6),0.03)
+```
+
+&nbsp; 
+
+__The Effect Matrix__  
+$P$ is a $K\times N$ matrix where we specify what the belief is and what sectors are affected.  For example, if we have three sectors _A_,_B_, and _C_, a belief that _A_ will outperform _C_ is equivalent to $P = [1,0,-1]$.  The sum of each row must equal to zero according to Idzorek.
+
+```{r}
+  P <- rbind(
+    c(-1/7,-1/7,-1/7, 1 ,-1/7,0,0,-1/7,-1/7,-1/7), #Health care overweight
+    c(-1/7,-1/7,-1/7,0,-1/7, 1 ,0,-1/7,-1/7,-1/7), #Info Tech overweight
+    c(-1/7,-1/7,-1/7,0,-1/7,0, 1 ,-1/7,-1/7,-1/7), #Utilities overweight
+    c(1/7,1/7,1/7,1/7, -1 ,1/7,1/7,1/7,0,0), #Financials underweight
+    c(1/7,1/7,1/7,1/7,0,1/7,1/7,1/7, -1 ,0), #Materials Underweight
+    c(1/7,1/7,1/7,1/7,0,1/7,1/7,1/7,0, -1 ), #Telecom Underweight
+    c(-1/9,-1/9, 1 ,0,-2/9,0,0,-1/9,-2/9,-2/9) # Energy Play
+    )
+```
+
+&nbsp; 
+
+__The Uncertainty Matrix__  
+$\Omega$ is a $K\times K$ positive-diagonal matrix specifying the variance of each view.  We assume each view is independent of each other and use the method introduced by Idzorek to specify the confidence.  For now, they will be set using $P_i^T \Sigma P_i \quad \forall i...N$, intuitively, this can be interpreted as the variance of going long/short a belief.
+
+```{r}
+  K <- dim(P)[1]
+  tau <- 0.01 # Irrelevant
+  omega <- matrix(0,K,K) #Declare empty matrix
+  # Set diagonal fields
+  for(i in 1:K){
+    omega[i,i] <- t(P[i,]) %*% (cov.mat %*% P[i,])
+  }
+```
+
+&nbsp; 
+
+### BL Weighting & Returns
+The Black-Litterman model final expected return mixing both implied returns and beliefs is stated bluntly:
+
+$$E[R] = [(\tau\Sigma)^{-1}+P^T\Omega^{-1}P]^{-1}[(\tau\Sigma)^{-1}\pi+P^T\Omega^{-1}Q]$$
+
+Likewise, for anyone that has taken STAT2607, the return of each asset is to follow a normal distribution with an expected return of the above equation $E[R]$ and a variance of $[(\tau\Sigma)^{-1}+P^T\Omega^{-1}P]^{-1}$.  Through normal optimization (reverse reverse optimization), we can apply the new sector returns to get weightings.
+
+$$ w^* = (\lambda\Sigma)^{-1}E[R] $$
+
+```{r}
+  bl.er <- solve(solve(tau*cov.mat)+t(P)%*%(solve(omega)%*%P)) %*% (solve(tau*cov.mat)%*%pi+t(P)%*%(solve(omega)%*%Q))
+  barplot(t(cbind(pi*100,bl.er*100)), beside=TRUE, col=2:3, cex.names=0.5, las=2, main="Sector Returns in Percentages", sub="Red = Old Implied, Green= New BL")
+  w.bl <- solve(c(lambda)*cov.mat)%*%bl.er
+  barplot(t(cbind(w.mkt*100,w.bl*100)), beside=TRUE, col=2:3, cex.names=0.5, las=2, main="Sector Weighting in Percentages", sub="Red = Market Cap, Green= New BL")
+```
+
+
+&nbsp; 
+
+### Calibrating Confidence Levels
+
+Although we have just fledged out the model, we have yet to incorporate equity managers' confidence levels.  Confidence levels are on a percentage basis and help to eliminate the confusing fine-tuning of $\tau$ and $\Omega$.  If the uncertainty matrix were to be zero, expected return equation is then
+
+$$E[R_{100\%}]=\pi+\tau\Sigma P^T(P\tau\Sigma P^T)^{-1}(Q-P\pi)$$  
+$$w^*_{100\%} = (\lambda\Sigma)^{-1}E[R_{100\%}]$$
+
+Define $Tilt=(w_{100\%}-w_{mkt})*C$ as a $N\times 1$ vector that specifies the degree of departure from 100% confidence level.  Conceptually, if we were 100% in one belief, we would allocate based on $w_{100\%}$ which deviates from original optimal allocation ($w_{mkt}$) by a certain percentage.  However, since we are only $C\%$ confident in the belief, we would only deviate by $(w_{100\%}-w_{mkt})*C$.  Implementation is as follows (for each $k$):  
+
+1. Define Confidence Levels
+2. Find $E[R_{100\%}]$ and $w^*_{100\%}$
+3. Find $Tilt$
+4. Find new confidence-incorporated weighting
+5. Solve for $\Omega_{k,k}$ such that the squared difference between the confidence weighting and BL output weighting are minimized.  BL outputing weighting is slightly different from the original formula such that it only has the k-th view.
+
+$$\omega_k = [\lambda\Sigma]^{-1}[(\tau\Sigma)^{-1}+P_k^T\Omega_{k,k}^{-1}P_k]^{-1}][(\tau\Sigma)^{-1}\pi+P_k^T\Omega_{k,k}^{-1}Q_k]$$
+
+```{r}
+  conf.levels <- c(0.8,0.6,0.8,0.9,0.8,0.9,0.7) # Step 1
+  for(i in 1:K){
+    # Step 2
+    bl.er.100 <- pi + (tau*cov.mat%*%P[i,])*as.numeric((solve(P[i,]%*%(tau*cov.mat)%*%P[i,]))*(Q[i]-P[i,]%*%pi))
+    w.bl.100 <- solve(c(lambda)*cov.mat)%*%bl.er.100
+    
+    #Step 3 & 4
+    tilt <- (w.bl.100-w.mkt)*conf.levels[i]
+    w.conf.k <- w.mkt + tilt
+    
+    #Step 5
+      #define obj function
+      omega_solve <- function(omega, w.conf.k, lambda, sigma, tau, p, pi, q){
+        #omega <- omega/10000
+        w.single <- solve(c(lambda)*sigma) %*%
+            solve(solve(tau*sigma)+(1/omega*p)%*%t(p)) %*%
+            (solve(tau*sigma)%*%pi+c((1/omega)*p*q))
+        sum(((w.conf.k-w.single))^2)
+      }
+    #Solve
+    m <- seq(0.0000001,0.001,by=0.0000001)
+    d <- 1
+    e <- c()
+    for(j in m){
+      e[d] <- omega_solve(j,w.conf.k,lambda,cov.mat,tau,P[i,],pi,Q[i])
+      d <- d+1
+    }  
+    omega[i,i] <- m[which.min(e)]
+  }
+```
+
+Let's take a look at the final list of weights for SSIF sector allocation.
+```{r}
+  bl.er <- solve(solve(tau*cov.mat)+t(P)%*%(solve(omega)%*%P)) %*% (solve(tau*cov.mat)%*%pi+t(P)%*%(solve(omega)%*%Q))
+  w.bl <- solve(c(lambda)*cov.mat)%*%bl.er
+  barplot(t(cbind(w.mkt*100,w.bl*100)), beside=TRUE, col=2:3, cex.names=0.5, las=2, main="Sector Weighting in Percentages", sub="Red = Market Cap, Green= New BL")
+```
+
+Since we cannot short a sector, one simple workaround is to recalibrate $\tau$ until all weights are zero or more.  The above chart is useful in seeing the effect of the views vector exacerbated. 
+
+```{r}
+  tau <- 0.00004
+  bl.er <- solve(solve(tau*cov.mat)+t(P)%*%(solve(omega)%*%P)) %*% (solve(tau*cov.mat)%*%pi+t(P)%*%(solve(omega)%*%Q))
+  w.bl <- solve(c(lambda)*cov.mat)%*%bl.er
+  barplot(t(cbind(w.mkt*100,w.bl*100)), beside=TRUE, col=2:3, cex.names=0.5, las=2, main="Sector Weighting in Percentages", sub="Red = Market Cap, Green= New BL")
+
+```
+
+***  
+
+&nbsp; 
+
+### Conclusion and Final Subjective Adjustments
+
+To summarize, in this report, I used the Black-Litterman model to estimate both sector returns and weighting.  Taking equity managers' beliefs on each sector, we create a new set of sector weightings that are consistent with the beliefs both in terms of direction and % confidence level.  The table below summarizes our results:
+
+Sectors | Belief | Confidence Level | $\Delta$ in Weights
+------- | ------ | ---------------- | -------------------
+Consumer Discretionary | Equal Weight | - | 0.24% 
+Consumer Staples | Equal Weight | - | 0.24%
+Energy | Equal Weight -> Overweight | 70% | 0.24%
+Health Care | Overweight | 80% | 2.94%
+Financials | Underweight | 90% | (3.34%)
+Info. Technology | Overweight | 60% | 1.21%
+Utilities | Overweight | 80% | 2.38%
+Industrials | Equal Weight | - | 0.24%
+Materials | Underweight | 80% | (1.39%)
+Telecom | Underweight | 90% | (2.76%)
