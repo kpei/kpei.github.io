@@ -146,11 +146,11 @@ $P$ is a $K\times N$ matrix where we specify what the belief is and what sectors
 &nbsp; 
 
 __The Uncertainty Matrix__  
-$\Omega$ is a $K\times K$ positive-diagonal matrix specifying the variance of each view.  We assume each view is independent of each other and use the method introduced by Idzorek to specify the confidence.  For now, they will be set using $P_i^T \Sigma P_i \quad \forall i...N$, intuitively, this can be interpreted as the variance of going long/short a belief.
+$\Omega$ is a $K\times K$ positive-diagonal matrix specifying the variance of each view.  We assume each view is independent of each other and use the method introduced by Idzorek to specify the confidence.  For now, they will be set using $P_i^T \Sigma P_i \quad \forall i...K$, intuitively, this can be interpreted as the variance of going long/short a belief.  I will show in later section that this becomes irrelevant as we calibrate $\Omega$ with confidence levels.
 
 ```{r}
   K <- dim(P)[1]
-  tau <- 0.01 # Irrelevant
+  tau <- 0.01 # Irrelevant for now
   omega <- matrix(0,K,K) #Declare empty matrix
   # Set diagonal fields
   for(i in 1:K){
