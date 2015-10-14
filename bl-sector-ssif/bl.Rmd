@@ -1,6 +1,6 @@
 ---
 title: 'Sector Weighting: A Detailed Implementation of Black-Litterman'
-author: "Kevin Pei - Portfolio Analyst"
+author: "Kevin Pei - Senior Portfolio Analyst"
 date: "Wednesday, May 06, 2015"
 output: 
   html_document:
