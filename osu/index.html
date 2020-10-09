@@ -142,8 +142,8 @@
 			    }),
 			    dataType: "json",
 			    contentType: "application/json; charset=utf-8",
-			    complete: function() {
-			        $('#result_alert').removeClass('alert-danger').removeClass('d-none');
+			    success: function() {
+			        $('#result_alert').removeClass('alert-danger').removeClass('d-none').addClass('alert-success');
 			        $('#result_alert #header').text('Awesome!');
 			        $('#result_alert span#text').text("You are now all registered for osu!flex.");
 			    },
