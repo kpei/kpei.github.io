@@ -44,17 +44,17 @@
                 <div class="col-sm-7">
                     <ul class="nav nav-tabs">
                         <li class="nav-item">
-                            <a class="nav-link disabled" href="index.html">Add Tracking</a>
+                            <a class="nav-link" href="index.html">Add Tracking</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-danger" href="delete.html">Delete My Tracking</a>
+                            <a class="nav-link text-danger disabled" href="delete.html">Delete My Tracking</a>
                         </li>
                     </ul>
                 </div>
             </div>
             <div class="row justify-content-center mt-3">
                 <div class="col-sm-7">
-                    <div id="result_alert" class="d-none text-break alert alert-success alert-dismissible fade show" role="alert"><strong id="header">Awesome!</strong> <span id="text">You are now all registered for osu!flex.</span></div>
+                    <div id="result_alert" class="d-none text-break alert alert-success alert-dismissible fade show" role="alert"><strong id="header">If your account exists,</strong> <span id="text">it will be removed from osu!flex tracking.</span></div>
                 </div>
             </div>
             <div class="row justify-content-center mt-3">
@@ -64,6 +64,7 @@
                             <label class="col-sm-3 col-form-label">Osu! Id</label>
                             <div class="col-sm-9">
                                 <input type="number" class="form-control" id="input_userid" placeholder="Osu! User Id" />
+                                <small class="text-info">User Id only. Do not put in a username!!</small>
                             </div>
                         </div>
                         <div class="form-group row">
@@ -72,15 +73,7 @@
                             </label>
                             <div class="col-sm-9">
                                 <input type="url" class="form-control" id="input_webhook_url" placeholder="e.g https://discordapp.com/api/webhooks/..." />
-                                <input type="hidden" id="input_webhook_type" value="discord" />
-                                <small class="text-info">Platforms currently supported: <img src="discord.png" class="icon img-responsive" /></small>
-                            </div>
-                        </div>
-                        <div class="form-group row">
-                            <label class="col-sm-3 col-form-label">Top Plays</label>
-                            <div class="col-sm-9">
-                                <input type="number" class="form-control" id="input_top_n" value="100" max="100" min="1" />
-                                <small class="text-info">Only announce to discord for plays within your top X plays. Max: 100</small>
+                                <small class="text-info">Ensure that you enter the exact url that was created before.</small>
                             </div>
                         </div>
                         <fieldset class="form-group">
@@ -117,7 +110,7 @@
                         </fieldset>
                         <div class="form-group row">
                             <div class="col-sm-10">
-                                <a href="#ni" class="btn btn-lg btn-info" id="add_user">Start tracking!</a>
+                                <a href="#ni" class="btn btn-lg btn-danger" id="delete_user">Delete tracking!</a>
                                 <img class="invisible" id="image_loading" src="loading.gif" />
                             </div>
                         </div>
@@ -128,7 +121,7 @@
         <script type="text/javascript">
             $("#add_user").click(function () {
                 $("#image_loading").removeClass("invisible");
-                $("#add_user").addClass("disabled");
+                $("#delete_user").addClass("disabled");
                 $("#result_alert").addClass("d-none");
 
                 function showError(message) {
@@ -139,27 +132,23 @@
 
                 function resetButton() {
                     $("#image_loading").addClass("invisible");
-                    $("#add_user").removeClass("disabled");
+                    $("#delete_user").removeClass("disabled");
                 }
 
                 $.ajax({
-                    url: "https://osu.kpei.me/api/user/add",
-                    type: "POST",
+                    url: "https://osu.kpei.me/api/user/delete",
+                    type: "DELETE",
                     data: JSON.stringify({
                         user_id: $("#input_userid").val(),
                         game_mode: 0,
-                        top_n: $("#input_top_n").val(),
-                        webhook: {
-                            url: $("#input_webhook_url").val(),
-                            type: $("#input_webhook_type").val(),
-                        },
+                        webhook_url: $("#input_webhook_url").val()
                     }),
                     dataType: "json",
                     contentType: "application/json; charset=utf-8",
                     success: function () {
                         $("#result_alert").removeClass("alert-danger").removeClass("d-none").addClass("alert-success");
-                        $("#result_alert #header").text("Awesome!");
-                        $("#result_alert span#text").text("You are now all registered for osu!flex.");
+                        $("#result_alert #header").text("If your account exists,");
+                        $("#result_alert span#text").text("it will be removed from osu!flex tracking.");
                         resetButton();
                     },
                     error: function (xhr, status, error) {
