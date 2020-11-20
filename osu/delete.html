@@ -135,15 +135,22 @@
                     $("#delete_user").removeClass("disabled");
                 }
 
+                function encodeQueryData(data) {
+                   const ret = [];
+                   for (let d in data)
+                     ret.push(encodeURIComponent(d) + '=' + encodeURIComponent(data[d]));
+                   return ret.join('&');
+                }
+
+                var data = {
+                    "user_id": $("#input_userid").val(),
+                    "game_mode": 0,
+                    "webhook_url": $("#input_webhook_url").val()
+                };
+
                 $.ajax({
-                    url: "https://osu.kpei.me/api/user/delete",
+                    url: "https://osu.kpei.me/api/user/delete?" + encodeQueryData(data),
                     type: "DELETE",
-                    data: JSON.stringify({
-                        user_id: $("#input_userid").val(),
-                        game_mode: 0,
-                        webhook_url: $("#input_webhook_url").val()
-                    }),
-                    dataType: "json",
                     contentType: "application/json; charset=utf-8",
                     success: function () {
                         $("#result_alert").removeClass("alert-danger").removeClass("d-none").addClass("alert-success");
