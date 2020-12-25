@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>flex your top osu! plays</title>
+        <script src="https://code.jquery.com/jquery-3.5.1.min.js" integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin="anonymous"></script>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous" />
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+        <style>
+            body {
+                background: url("bg.webp");
+            }
+            img.logo {
+                border-radius: 25%;
+                max-width: 150px;
+            }
+            img.icon {
+                max-width: 16px;
+            }
+            .gradient {
+                position: relative;
+                border: 4px solid transparent;
+                border-radius: 16px;
+                background: linear-gradient(#40e0d0, violet);
+                background-clip: padding-box;
+                padding: 5px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container-xl mt-5">
+            <div class="row justify-content-center h-100">
+                <div class="media">
+                    <img src="charmy.png" class="mr-3 gradient logo img-responsive">
+                    <div class="media-body">
+                        <h1 class="text-dark">osu!flex</h1>
+                        <p class="lead text-info">
+                            Top play tracking, alerts and stream replay!
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="row justify-content-center mt-3">
+                <div class="col-sm-7">
+                    <ul class="nav nav-tabs">
+                        <li class="nav-item">
+                            <a class="nav-link text-info" href="index.html">Add Tracking</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-danger" href="delete.html">Delete My Tracking</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link disabled" href="server.html">Add My Server</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="row justify-content-center mt-3">
+                <div class="col-sm-7">
+                    <div id="result_alert" class="d-none text-break alert alert-success alert-dismissible fade show" role="alert">
+                        <strong id="header">Awesome!</strong> 
+                        <span id="text">Your server is now registered on osu!flex. Give the link below to your server members:</span>
+                        <hr/>
+                        https://kpei.github.io/osu/
+                    </div>
+                </div>
+            </div>
+            <div class="row justify-content-center mt-3">
+                <div class="col-sm-12 col-md-7">
+                    <form>
+                        <div class="form-group row">
+                            <label class="col-sm-3 col-form-label">Discord Invite Link</label>
+                            <div class="col-sm-9">
+                                <input class="form-control" type="url" id="input_invite_url" placeholder="https://discord.gg/...." />
+                                <small class="text-info">Can be for any channel and not expired.</small>
+                            </div>
+                        </div>
+                        <div id="webhook_form_group" class="form-group row">
+                            <label class="col-sm-3 col-form-label">
+                                Discord Webhook URL <a target="_blank" href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks"><b>(?)</b></a>
+                            </label>
+                            <div class="col-sm-9">
+                                <input type="url" class="form-control" id="input_webhook_url" placeholder="e.g https://discordapp.com/api/webhooks/..." />
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <div class="col-sm-10">
+                                <a href="#ni" class="btn btn-lg btn-info" id="add_server">Create my Server Link!</a>
+                                <img class="invisible" id="image_loading" src="loading.gif" />
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <script type="text/javascript">
+            $("#add_server").click(function () {
+                $("#image_loading").removeClass("invisible");
+                $("#add_server").addClass("disabled");
+                $("#result_alert").addClass("d-none");
+
+                function showError(message) {
+                    $("#result_alert").removeClass("d-none").removeClass("alert-success").addClass("alert-danger");
+                    $("#result_alert #header").text("Uh Oh!");
+                    $("#result_alert span#text").text(message);
+                }
+
+                function resetButton() {
+                    $("#image_loading").addClass("invisible");
+                    $("#add_server").removeClass("disabled");
+                }
+
+                $.ajax({
+                    url: "https://osu.kpei.me/api/server/add",
+                    type: "POST",
+                    data: JSON.stringify({
+                        webhook_url: $("#input_webhook_url").val(),
+                        invite_url: $("#input_invite_url").val()
+                    }),
+                    dataType: "json",
+                    contentType: "application/json; charset=utf-8",
+                    success: function (data) {
+                        if(data.server_id){
+                            $("#result_alert").removeClass("alert-danger").removeClass("d-none").addClass("alert-success");
+                            $("#result_alert #header").text("Awesome!");
+                            $("#result_alert span#text").html("Your server is now registered on osu!flex. Give the link below to your server members:<hr/>https://kpei.github.io/osu/?id=" + data.server_id);
+                            resetButton();
+                        } else {
+                            showError("Something unexpected happened. Please try again later!");
+                            resetButton();
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        if (status === "error") {
+                            var json = $.parseJSON(xhr.responseText);
+                            showError(json.error_message);
+                        } else {
+                            showError("Something unexpected happened. Please try again later!");
+                        }
+                        resetButton();
+                    },
+                });
+            });
+        </script>
+    </body>
+</html>
