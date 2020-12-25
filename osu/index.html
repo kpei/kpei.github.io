@@ -30,14 +30,14 @@
     <body>
         <div class="container-xl mt-5">
             <div class="row justify-content-center h-100">
-                <div class="col-sm-3 col-md-2 my-auto">
-                    <img src="charmy.png" class="gradient logo img-responsive" />
-                </div>
-                <div class="col-sm-8 col-md-5 my-auto">
-                    <h1 class="text-dark">osu!flex</h1>
-                    <p class="lead text-info">
-                        Top play tracking, alerts and stream replay!
-                    </p>
+                <div class="media">
+                    <img src="charmy.png" class="mr-3 gradient logo img-responsive">
+                    <div class="media-body">
+                        <h1 class="text-dark">osu!flex</h1>
+                        <p class="lead text-info">
+                            Top play tracking, alerts and stream replay!
+                        </p>
+                    </div>
                 </div>
             </div>
             <div class="row justify-content-center mt-3">
@@ -50,6 +50,19 @@
                             <a class="nav-link text-danger" href="delete.html">Delete My Tracking</a>
                         </li>
                     </ul>
+                </div>
+            </div>
+            <div class="row justify-content-center mt-3">
+                <div class="col-sm-12 col-md-7">    
+                    <div id="server" class="d-none alert alert-info" role="alert">
+                        <div class="media">
+                            <img id="server_icon" src="charmy.png" class="mr-3 gradient logo img-responsive">
+                            <div class="media-body">
+                                <h2 id="server_name" class="mt-2">server name goes here</h2>
+                                You are adding your osu tracking to the above discord server. Just fill out your osu username/id to get started!
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="row justify-content-center mt-3">
@@ -66,7 +79,7 @@
                                 <input class="form-control" id="input_userid" placeholder="Osu! User Id" />
                             </div>
                         </div>
-                        <div class="form-group row">
+                        <div id="webhook_form_group" class="form-group row">
                             <label class="col-sm-3 col-form-label">
                                 Webhook URL <a target="_blank" href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks"><b>(?)</b></a>
                             </label>
@@ -126,6 +139,39 @@
             </div>
         </div>
         <script type="text/javascript">
+            var getUrlParameter = function getUrlParameter(sParam) {
+                 var sPageURL = window.location.search.substring(1),
+                     sURLVariables = sPageURL.split('&'),
+                     sParameterName,
+                     i;
+
+                 for (i = 0; i < sURLVariables.length; i++) {
+                     sParameterName = sURLVariables[i].split('=');
+
+                     if (sParameterName[0] === sParam) {
+                         return sParameterName[1] === undefined ? true : decodeURIComponent(sParameterName[1]);
+                     }
+                 }
+            };
+
+            $(document).ready(function() {
+
+                 var server_id = parseInt(getUrlParameter("id"));
+                 console.log(server_id);
+
+                 if(server_id) {
+                     $.getJSON("https://osu.kpei.me/api/server?server_id=" + server_id, function( data ) {
+                       if(data) {
+                          $('#input_webhook_url').val(data.webhook_url);
+                          $('#server_name').text(data.name);
+                          $('#server_icon').attr('src', data.icon_url);
+                          $('#server').removeClass('d-none');
+                          $('#webhook_form_group').addClass('d-none');
+                       }
+                     });
+                 }
+            });
+
             $("#add_user").click(function () {
                 $("#image_loading").removeClass("invisible");
                 $("#add_user").addClass("disabled");
